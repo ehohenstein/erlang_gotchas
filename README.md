@@ -2,8 +2,8 @@
 
 This is intended to be a compilation of various things related to the Erlang
 runtime that can severely impact performance of an Erlang application if you
-don't know about them and consider them in the design of your Erlang applications.
-This is not intended to be comprehensive but it consists of the things that
+aren't aware of them and consider them in the design of your Erlang applications.
+This is not intended to be a comprehensive list but it consists of the things that
 I have learned the hard way. Hopefully it can help you not repeat my mistakes.
 
 ## Selective receive
@@ -31,7 +31,7 @@ If one of the pattens is just a single variable then it will match any message
 and the message received will always be the first message in the queue. Here's
 an example:
 
-```
+```Erlang
 receive
     foo -> io:format("I received the atom foo~n");
     {foo, bar} -> io:format("I received the tuple {foo, bar}~n");
@@ -50,7 +50,7 @@ process will be suspended until a message arrives matching one of the statements
 One feature of Erlang is that it is possible for messages to be handled out of
 order by not specifying a wildcard pattern in a receive statement. For example:
 
-```
+```Erlang
 receive
     {foo, _Foo} -> io:format("I received a tuple starting with foo~n");
     {bar, _Bar} -> io:format("I received a tuple starting with bar~n")
@@ -93,12 +93,15 @@ following commands and you should see output similar to the following:
 
 ```
 $ make
+erlc gotchas.erl
 $ ./selective_receive.escript 1000
 1000 selective receive loops took 0.002 seconds
 ```
 
 Now try doubling the number of loops and see what happens. This is what
-happens when I do it:
+happens when I do it in an Ubuntu 18.04 VM using Erlang 21.3, though I have
+observed similar results in many other versions of Erlang, at least as
+far back as Erlang R15B02:
 
 ```
 $ ./selective_receive.escript 2000
@@ -114,10 +117,15 @@ $ ./selective_receive.escript 32000
 ```
 
 Each time I have doubled the number of receive loops procesed and each time
-the amount of time it takes to process them increases by a factor of 4. If
-it were a linear increase, the time taken should increase by a factor of 2,
-not 4. An increase by a factor of 4 is exactly what we would expect for an
-O(N^2) algorithm.
+the amount of time it takes to process them increases by approximately a factor
+of 4. If it were a linear increase, the time taken should increase by a factor
+of 2, not 4. An increase by a factor of 4 is exactly what we would expect for an
+O(N^2) algorithm when N is doubled.
+
+Note that if you make N really really large, your system may start to swap since
+the test involves creating N messages simultaneously in memory. You should attempt
+to verify that you are not measuring swap. I can confirm that swap did not occur
+while producing the output above.
 
 Let's look briefly at the code to see what it's doing.
 
@@ -198,7 +206,7 @@ to worry about a call stack growing without bounds. The effect here is that
 the loop will be performed `Count` times. After that, the `selective_receive_loop`
 function will return to the `selective_receive_entry` function which will
 send the time taken to the parent process. The measurement is done with a simple
-function called `time_fun` which I won't present here but you can see it in the
+function called `time_fun/1` which I won't present here but you can see it in the
 source if you're curious how it works.
 
 So now it should be clear that selective receive can have a serious performance
@@ -236,7 +244,7 @@ fast enough that the Erlang process will run out of memory or cause swapping
 which then, of course, affects the entire node.
 
 The solution is to utilize a strategy such that before any message is handled,
-the entire message queue is drained into process memory. That way, if a handling
+the entire message queue is drained into process memory. That way, if handling
 the message involves selective receive, the queue of messages to be scanned
 only includes those messages that have arrived in it while handling the current
 message. I will show separately why this strategy doesn't entirely avoid the
@@ -258,13 +266,13 @@ are written using `gen_server` rather than `gen_server2`. The one I have most
 often observed to suffer from the selective receive problem is the system
 `error_logger` process. If a problem occurs in your application that causes
 a great deal of logging, you may see that the `error_logger` has gotten way
-behind. A symptom of this problem would be that you continue to see error
-messages being logged long after the problem that caused them has been resolved.
-This could be misleading, in fact, and might make you think that a problem is
-still occurring when it is not. You might not be able to tell that this is
-what's happening unless you are regularly measuring and reporting the queue
-lengths of all processes. You can inspect the queue lengths of processes
-using the `erlang:process_info/1` or `erlang:process_info/2` functions.
-Consider adding a process to your application that periodically checks the
-length of the message queue of all processes and reports any that have very
-large queues.
+behind processing log messages. A symptom of this problem would be that you
+continue to see error messages being logged long after the problem that caused
+them has been resolved. This could be misleading, in fact, and might make you
+think that a problem is still occurring when it is not. You might not be able
+to tell that this is what's happening unless you are regularly measuring and
+reporting the queue lengths of all processes. You can inspect the queue lengths
+of processes using the `erlang:process_info/1` or `erlang:process_info/2`
+functions. Consider adding a process to your application that periodically
+checks the length of the message queue of all processes and reports any that
+have very large queues.
