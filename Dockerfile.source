@@ -1,0 +1,8 @@
+FROM bionic-erlang
+
+COPY start_source.sh /root/start_source.sh
+
+WORKDIR /root
+
+ENTRYPOINT ["/root/start_source.sh"]
+

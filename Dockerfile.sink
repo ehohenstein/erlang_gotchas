@@ -1,0 +1,8 @@
+FROM bionic-erlang
+
+COPY start_sink.sh /root/start_sink.sh
+
+WORKDIR /root
+
+ENTRYPOINT ["/root/start_sink.sh"]
+
