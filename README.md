@@ -536,7 +536,7 @@ Unless the `nosuspend` flag is used when sending a message in Erlang, then
 if the buffer is full to the target node, the calling process will be
 suspended.
 
-When we rant the source node using the `make start-source` command, we
+When we ran the source node using the `make start-source` command, we
 started it in a way such that it will use empty flags when it sends
 messages to the sink node. The way this is done is by not including
 the `SOURCE_FLAGS` environment variable when starting the source node
@@ -674,6 +674,12 @@ the source node with this command:
 
 ```
 make start-source-failfast
+```
+
+This command will cause the source to do this:
+
+```
+erlang:send(Sink, {foobar, I}, [nosuspend,noconnect])
 ```
 
 You should see messages again flowing between the source and sink nodes.
